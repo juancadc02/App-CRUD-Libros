@@ -72,9 +72,15 @@ namespace App_Crud_Biblioteca
                                             listaDeLibros = consultasPostgresInterfaz.listarTodoLosLibros(conexion);
                                             Console.WriteLine("\n\tId    Titulo    Autor   Isbn   Edicion");
                                             consultasPostgresInterfaz.mostrarListado(listaDeLibros);
+                                            List<long> listaId = new List<long>();
+                                            for(int i =0; i < listaDeLibros.Count; i++)
+                                            {
+                                                listaId.Add(listaDeLibros[i].Id_libro);
+                                            }
                                             //Modificamos el que elegimos
                                             Console.Write("\n\n\t¿Elige el id del libro que quieres modificar?");
                                             string id = Console.ReadLine();
+                                            
                                             Console.Write("\n\n\tIntroduce el nuevo titulo: ");
                                             string nuevoTitulo = Console.ReadLine();
                                             consultasPostgresInterfaz.modificarTitulo(Convert.ToInt32(id), nuevoTitulo, conexion);

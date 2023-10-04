@@ -52,7 +52,7 @@ namespace App_Crud_Biblioteca.Servicios
                     }
                     conexion.Close();
 
-                    Console.WriteLine("Libro insertado con éxito en la base de datos.");
+                Console.WriteLine("\n\n\tLibro insertado: Titulo:{0}  Autor:{1}  ISBN:{2}  Edicion:{3}",nuevoLibro.Titulo,nuevoLibro.Autor,nuevoLibro.Isbn,nuevoLibro.Edicion);
 
                 }
                 catch (Exception ex)
@@ -87,6 +87,7 @@ namespace App_Crud_Biblioteca.Servicios
                     if (rowsAffected > 0)
                     {
                         Console.WriteLine($"Libro con ID {id} eliminado exitosamente.");
+
                     }
                     else
                     {
