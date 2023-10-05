@@ -10,6 +10,11 @@ namespace App_Crud_Biblioteca.Util
 {
     internal class ADto
     {
+        /// <summary>
+        /// Metodo que devuelve una lista con todos los datos de un Objeto LibroDto
+        /// </summary>
+        /// <param name="resultadoConsulta"></param>
+        /// <returns></returns>
         public List<LibrosDto> readerALibroDto(NpgsqlDataReader resultadoConsulta)
         {
             List<LibrosDto> listaLibros = new List<LibrosDto>();

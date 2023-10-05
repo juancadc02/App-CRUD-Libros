@@ -5,6 +5,7 @@ using NpgsqlTypes;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.SqlClient;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -55,10 +56,26 @@ namespace App_Crud_Biblioteca.Servicios
                 Console.WriteLine("\n\n\tLibro insertado: Titulo:{0}  Autor:{1}  ISBN:{2}  Edicion:{3}",nuevoLibro.Titulo,nuevoLibro.Autor,nuevoLibro.Isbn,nuevoLibro.Edicion);
 
                 }
-                catch (Exception ex)
+                catch (NpgsqlException npsqlEx)
                 {
-                    Console.WriteLine("\n\n\tSe ha producido un error" + ex);
+                    Console.WriteLine("\n\n\tSe ha producido un error relaccionado con la base de datos" + npsqlEx);
                     conexion = null;
+                }catch(FormatException formatEx)
+                {
+                Console.WriteLine("\n\n\tSe ha producido un error al convertir un valor a un tipo de dato específico "+ formatEx);
+                conexion = null;
+                }
+                catch(Exception ex)
+                {
+                Console.WriteLine("\n\n\tSe ha producido un error desconocido:  " + ex);
+                }
+                finally
+                {
+                // Cierra la conexión si es necesario
+                if (conexion.State == ConnectionState.Open)
+                {
+                    conexion.Close();
+                }
                 }
             
             
@@ -67,37 +84,76 @@ namespace App_Crud_Biblioteca.Servicios
 
         public void eliminarLibro(NpgsqlConnection conexion)
         {
-            if (conexion.State != ConnectionState.Open)
-            {
-                conexion.Open();
-            }
-            Console.WriteLine("\n\n\t¿Qué libro quieres eliminar (idLibro)?");
-            string id = Console.ReadLine();
 
+            List<long> listaId;
+            listaId = listarTodosLosId(conexion);
+            string id;
             try
             {
-                string sqlQuery = "DELETE FROM gbp_alm_cat_libros WHERE id_libros = @id_libros";
-
-                using (NpgsqlCommand comando = new NpgsqlCommand(sqlQuery, conexion))
+                if (conexion.State != ConnectionState.Open)
                 {
-                    comando.Parameters.AddWithValue("@id_libros", NpgsqlDbType.Integer, int.Parse(id)); // Convierte el ID a entero
+                    conexion.Open();
+                }
+                while (true)
+                {
+                    Console.WriteLine("\n\n\t¿Qué libro quieres eliminar (idLibro)?");
+                    id = Console.ReadLine();
 
-                    int rowsAffected = comando.ExecuteNonQuery();
-
-                    if (rowsAffected > 0)
+                    
+                    //Comprueba a ver si lo ingresado lo puede pasar a long.
+                    //Si puede convertirlo a los lo almacena en idIngresado,si no se va al else.
+                    if (long.TryParse(id, out long idIngresado))
                     {
-                        Console.WriteLine($"Libro con ID {id} eliminado exitosamente.");
+                        // Comprueba si el idIngresado está en la lista.
+                        //En el caso de que este ejecuta la consulta.
+                        if (listaId.Contains(idIngresado))
+                        {
+                            string sqlQuery = "DELETE FROM gbp_alm_cat_libros WHERE id_libros = @id_libros";
 
+                            using (NpgsqlCommand comando = new NpgsqlCommand(sqlQuery, conexion))
+                            {
+                                comando.Parameters.AddWithValue("@id_libros", NpgsqlDbType.Integer, int.Parse(id)); // Convierte el ID a entero
+
+                                comando.ExecuteNonQuery();                             
+                            }
+                            break; // Sale del bucle
+                        }
+                        else
+                        {
+                            Console.WriteLine("El ID ingresado no está en la lista. Intente nuevamente.");
+                        }
                     }
                     else
                     {
-                        Console.WriteLine($"No se encontró ningún libro con ID {id}.");
+                        Console.WriteLine("Entrada no válida. Por favor, ingrese un número válido.");
                     }
                 }
+            }
+            catch (SqlException sqlEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error en la consulta SQL: " + sqlEx);
+            }
+            catch (NpgsqlException npsqlEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error relaccionado con la base de datos" + npsqlEx);
+                conexion = null;
+            }
+            catch (FormatException formatEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error al convertir un valor a un tipo de dato específico " + formatEx);
+                conexion = null;
             }
             catch (Exception ex)
             {
                 Console.WriteLine("\n\n\tSe ha producido un error: " + ex);
+            }
+            finally
+            {
+                // Cierra la conexión si es necesario
+                if (conexion.State == ConnectionState.Open)
+                {
+                    conexion.Close();
+                }
             }
         }
 
@@ -109,35 +165,54 @@ namespace App_Crud_Biblioteca.Servicios
             }
             ADto aDto = new ADto();
             List<LibrosDto> listaDeLibros = new List<LibrosDto>();
-            
-                try
+
+            try
+            {
+                //Si dejo puesto el conexion.open() me da error al ejecutar.
+                // conexion.Open();
+                string tableName = "gbp_alm_cat_libros";
+                string sqlQuery = $"SELECT * FROM {tableName}";
+
+                using (NpgsqlCommand comando = new NpgsqlCommand(sqlQuery, conexion))
                 {
-                    //Si dejo puesto el conexion.open() me da error al ejecutar.
-                    // conexion.Open();
-                    string tableName = "gbp_alm_cat_libros";
-                    string sqlQuery = $"SELECT * FROM {tableName}";
+                    NpgsqlDataReader resultadoConsulta = comando.ExecuteReader();
 
-                    using (NpgsqlCommand comando = new NpgsqlCommand(sqlQuery, conexion))
-                    {
-                        NpgsqlDataReader resultadoConsulta = comando.ExecuteReader();
+                    //Pasamos el DataReader a la lista 
 
-                        //Pasamos el DataReader a la lista 
-
-                        listaDeLibros = aDto.readerALibroDto(resultadoConsulta);
-                        Console.WriteLine("[INFORMACIÓN-ConsultasPostgresqlImplementacion-seccionarTodosLibros] Cierre conexión y conjunto de datos");
-                        conexion.Close();
-                        resultadoConsulta.Close();
-                    }
-                }
-
-                catch (Exception e)
-                {
-
-                    Console.WriteLine("[ERROR-ConsultasPostgresqlImplementacion-seccionarTodosLibros] Error al ejecutar consulta: " + e);
+                    listaDeLibros = aDto.readerALibroDto(resultadoConsulta);
+                    Console.WriteLine("[INFORMACIÓN-ConsultasPostgresqlImplementacion-seccionarTodosLibros] Cierre conexión y conjunto de datos");
                     conexion.Close();
-
+                    resultadoConsulta.Close();
                 }
-            
+            } catch (SqlException sqlEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error en la consulta SQL: " + sqlEx);
+            }
+            catch (NpgsqlException npsqlEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error relaccionado con la base de datos" + npsqlEx);
+                conexion = null;
+            }
+            catch (FormatException formatEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error al convertir un valor a un tipo de dato específico " + formatEx);
+                conexion = null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error: " + ex);
+
+
+            }
+            finally
+            {
+                // Cierra la conexión si es necesario
+                if (conexion.State == ConnectionState.Open)
+                {
+                    conexion.Close();
+                }
+            }
+
             return listaDeLibros;
         }
 
@@ -152,7 +227,8 @@ namespace App_Crud_Biblioteca.Servicios
 
 
         #region Metodos UPDATE 
-        public void modificarTitulo(int idLibro,string nuevoTitulo, NpgsqlConnection conexion)
+
+        public void modificarTitulo(int idLibro, string nuevoTitulo, NpgsqlConnection conexion)
         {
             //Comprobamos si la conexion esta abierta o no, y en el caso de que no lo este la abrimos.
             if (conexion.State != ConnectionState.Open)
@@ -161,53 +237,78 @@ namespace App_Crud_Biblioteca.Servicios
             }
 
             // Primero, obtén los datos actuales del libro
-            LibrosDto libroModificar = new LibrosDto();
-            string consulta = "SELECT * FROM gbp_alm_cat_libros WHERE id_libros = @idLibro";
-
-            using (NpgsqlCommand comando = new NpgsqlCommand(consulta, conexion))
+            try
             {
-                //Le pasamos el parametro del idLibro para que haga
-                comando.Parameters.AddWithValue("@idLibro", idLibro);
+                LibrosDto libroModificar = new LibrosDto();
+                string consulta = "SELECT * FROM gbp_alm_cat_libros WHERE id_libros = @idLibro";
 
-                //Obtenemos los resultado de la consulta y se lo accionamos a cada propiedad.
-                using (NpgsqlDataReader reader = comando.ExecuteReader())
+                using (NpgsqlCommand comando = new NpgsqlCommand(consulta, conexion))
                 {
-                    //Verificamos si hemos encontrado el libro con ese id
-                    if (reader.HasRows)
+                    //Le pasamos el parametro del idLibro para que haga
+                    comando.Parameters.AddWithValue("@idLibro", idLibro);
+
+                    //Obtenemos los resultado de la consulta y se lo accionamos a cada propiedad.
+                    using (NpgsqlDataReader reader = comando.ExecuteReader())
                     {
-                        reader.Read();
-                        //Asignamos los distintos valores a los campos de libro.
-                        libroModificar.Id_libro = idLibro;
-                        libroModificar.Titulo = reader["Titulo"].ToString();
-                        libroModificar.Autor = reader["Autor"].ToString();
-                        libroModificar.Isbn = reader["isbn"].ToString();
-                        
-                        reader.Close();
+                        //Verificamos si hemos encontrado el libro con ese id
+                        if (reader.HasRows)
+                        {
+                            reader.Read();
+                            //Asignamos los distintos valores a los campos de libro.
+                            libroModificar.Id_libro = idLibro;
+                            libroModificar.Titulo = reader["Titulo"].ToString();
+                            libroModificar.Autor = reader["Autor"].ToString();
+                            libroModificar.Isbn = reader["isbn"].ToString();
+
+                            reader.Close();
+                        }
                     }
+                }
+
+
+                // Ponemos el nuevo título en el objeto libroModificar
+                libroModificar.Titulo = nuevoTitulo;
+
+                // Consulta de actualización para modificar el título en la base de datos
+                string consultaActualizacion = "UPDATE gbp_alm_cat_libros SET Titulo = @nuevoTitulo WHERE id_libros = @idLibro";
+
+                using (NpgsqlCommand comando = new NpgsqlCommand(consultaActualizacion, conexion))
+                {
+                    comando.Parameters.AddWithValue("@nuevoTitulo", nuevoTitulo);
+                    comando.Parameters.AddWithValue("@idLibro", idLibro);
+                    // Ejecuta la consulta de actualización
+                    comando.ExecuteNonQuery();
+
+                }
+            }
+            catch (SqlException sqlEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error en la consulta SQL: " + sqlEx);
+            }
+            catch (NpgsqlException npsqlEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error relaccionado con la base de datos" + npsqlEx);
+                conexion = null;
+            }
+            catch (FormatException formatEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error al convertir un valor a un tipo de dato específico " + formatEx);
+                conexion = null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error: " + ex);
+            }
+            finally
+            {
+                // Cierra la conexión si es necesario
+                if (conexion.State == ConnectionState.Open)
+                {
+                    conexion.Close();
                 }
             }
 
-            
-            // Ponemos el nuevo título en el objeto libroModificar
-            libroModificar.Titulo = nuevoTitulo;
 
-            // Consulta de actualización para modificar el título en la base de datos
-            string consultaActualizacion = "UPDATE gbp_alm_cat_libros SET Titulo = @nuevoTitulo WHERE id_libros = @idLibro";
-
-            using (NpgsqlCommand comando = new NpgsqlCommand(consultaActualizacion, conexion))
-            {
-                comando.Parameters.AddWithValue("@nuevoTitulo", nuevoTitulo);
-                comando.Parameters.AddWithValue("@idLibro", idLibro);
-
-                // Ejecuta la consulta de actualización
-                comando.ExecuteNonQuery();
-            }
-
-            // Cierra la conexión si es necesario
-            if (conexion.State == ConnectionState.Open)
-            {
-                conexion.Close();
-            }
 
         }
 
@@ -219,55 +320,80 @@ namespace App_Crud_Biblioteca.Servicios
                 conexion.Open();
             }
 
-            // Primero, obtén los datos actuales del libro
-            LibrosDto libroModificar = new LibrosDto();
-            string consulta = "SELECT * FROM gbp_alm_cat_libros WHERE id_libros = @idLibro";
-
-            using (NpgsqlCommand comando = new NpgsqlCommand(consulta, conexion))
+            try
             {
-                //Le pasamos el parametro del idLibro para que haga
-                comando.Parameters.AddWithValue("@idLibro", idLibro);
+                // Primero, obtén los datos actuales del libro
+                LibrosDto libroModificar = new LibrosDto();
+                string consulta = "SELECT * FROM gbp_alm_cat_libros WHERE id_libros = @idLibro";
 
-                //Obtenemos los resultado de la consulta y se lo accionamos a cada propiedad.
-                using (NpgsqlDataReader reader = comando.ExecuteReader())
+                using (NpgsqlCommand comando = new NpgsqlCommand(consulta, conexion))
                 {
-                    //Verificamos si hemos encontrado el libro con ese id
-                    if (reader.HasRows)
-                    {
-                        reader.Read();
-                        //Asignamos los distintos valores a los campos de libro.
-                        libroModificar.Id_libro = idLibro;
-                        libroModificar.Titulo = reader["Titulo"].ToString();
-                        libroModificar.Autor = reader["Autor"].ToString();
-                        libroModificar.Isbn = reader["isbn"].ToString();
+                    //Le pasamos el parametro del idLibro para que haga
+                    comando.Parameters.AddWithValue("@idLibro", idLibro);
 
-                        reader.Close();
+                    //Obtenemos los resultado de la consulta y se lo accionamos a cada propiedad.
+                    using (NpgsqlDataReader reader = comando.ExecuteReader())
+                    {
+                        //Verificamos si hemos encontrado el libro con ese id
+                        if (reader.HasRows)
+                        {
+                            reader.Read();
+                            //Asignamos los distintos valores a los campos de libro.
+                            libroModificar.Id_libro = idLibro;
+                            libroModificar.Titulo = reader["Titulo"].ToString();
+                            libroModificar.Autor = reader["Autor"].ToString();
+                            libroModificar.Isbn = reader["isbn"].ToString();
+
+                            reader.Close();
+                        }
+
                     }
-                        
+                }
+
+
+                // Ponemos el nuevo autor en el objeto libroModificar
+                libroModificar.Autor = nuevoAutor;
+
+                // Consulta de actualización para modificar el autor en la base de datos
+                string consultaActualizacion = "UPDATE gbp_alm_cat_libros SET Autor = @nuevoAutor WHERE id_libros = @idLibro";
+
+                using (NpgsqlCommand comando = new NpgsqlCommand(consultaActualizacion, conexion))
+                {
+                    comando.Parameters.AddWithValue("@nuevoAutor", nuevoAutor);
+                    comando.Parameters.AddWithValue("@idLibro", idLibro);
+
+                    // Ejecuta la consulta de actualización
+                    comando.ExecuteNonQuery();
+                }
+            }
+            catch (SqlException sqlEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error en la consulta SQL: " + sqlEx);
+            }
+            catch (NpgsqlException npsqlEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error relaccionado con la base de datos" + npsqlEx);
+                conexion = null;
+            }
+            catch (FormatException formatEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error al convertir un valor a un tipo de dato específico " + formatEx);
+                conexion = null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error: " + ex);
+            }
+            finally
+            {
+                // Cierra la conexión si es necesario
+                if (conexion.State == ConnectionState.Open)
+                {
+                    conexion.Close();
                 }
             }
 
-
-            // Ponemos el nuevo autor en el objeto libroModificar
-            libroModificar.Autor = nuevoAutor;
-
-            // Consulta de actualización para modificar el autor en la base de datos
-            string consultaActualizacion = "UPDATE gbp_alm_cat_libros SET Autor = @nuevoAutor WHERE id_libros = @idLibro";
-
-            using (NpgsqlCommand comando = new NpgsqlCommand(consultaActualizacion, conexion))
-            {
-                comando.Parameters.AddWithValue("@nuevoAutor", nuevoAutor);
-                comando.Parameters.AddWithValue("@idLibro", idLibro);
-
-                // Ejecuta la consulta de actualización
-                comando.ExecuteNonQuery();
-            }
-
-            // Cierra la conexión si es necesario
-            if (conexion.State == ConnectionState.Open)
-            {
-                conexion.Close();
-            }
+           
         }
 
         public void modificarIsbn(int idLibro, string nuevoIsbn, NpgsqlConnection conexion)
@@ -278,54 +404,79 @@ namespace App_Crud_Biblioteca.Servicios
                 conexion.Open();
             }
 
-            // Primero, obtén los datos actuales del libro
-            LibrosDto libroModificar = new LibrosDto();
-            string consulta = "SELECT * FROM gbp_alm_cat_libros WHERE id_libros = @idLibro";
-
-            using (NpgsqlCommand comando = new NpgsqlCommand(consulta, conexion))
+            try
             {
-                //Le pasamos el parametro del idLibro para que haga
-                comando.Parameters.AddWithValue("@idLibro", idLibro);
+                // Primero, obtén los datos actuales del libro
+                LibrosDto libroModificar = new LibrosDto();
+                string consulta = "SELECT * FROM gbp_alm_cat_libros WHERE id_libros = @idLibro";
 
-                //Obtenemos los resultado de la consulta y se lo accionamos a cada propiedad.
-                using (NpgsqlDataReader reader = comando.ExecuteReader())
+                using (NpgsqlCommand comando = new NpgsqlCommand(consulta, conexion))
                 {
-                    //Verificamos si hemos encontrado el libro con ese id
-                    if (reader.HasRows)
-                    {
-                        reader.Read();
-                        //Asignamos los distintos valores a los campos de libro.
-                        libroModificar.Id_libro = idLibro;
-                        libroModificar.Titulo = reader["Titulo"].ToString();
-                        libroModificar.Autor = reader["Autor"].ToString();
-                        libroModificar.Isbn = reader["isbn"].ToString();
+                    //Le pasamos el parametro del idLibro para que haga
+                    comando.Parameters.AddWithValue("@idLibro", idLibro);
 
-                        reader.Close();
+                    //Obtenemos los resultado de la consulta y se lo accionamos a cada propiedad.
+                    using (NpgsqlDataReader reader = comando.ExecuteReader())
+                    {
+                        //Verificamos si hemos encontrado el libro con ese id
+                        if (reader.HasRows)
+                        {
+                            reader.Read();
+                            //Asignamos los distintos valores a los campos de libro.
+                            libroModificar.Id_libro = idLibro;
+                            libroModificar.Titulo = reader["Titulo"].ToString();
+                            libroModificar.Autor = reader["Autor"].ToString();
+                            libroModificar.Isbn = reader["isbn"].ToString();
+
+                            reader.Close();
+                        }
                     }
+                }
+
+
+                // Ponemos el nuevo autor en el objeto libroModificar
+                libroModificar.Isbn = nuevoIsbn;
+
+                // Consulta de actualización para modificar el autor en la base de datos
+                string consultaActualizacion = "UPDATE gbp_alm_cat_libros SET isbn = @nuevoIsbn WHERE id_libros = @idLibro";
+
+                using (NpgsqlCommand comando = new NpgsqlCommand(consultaActualizacion, conexion))
+                {
+                    comando.Parameters.AddWithValue("@nuevoIsbn", nuevoIsbn);
+                    comando.Parameters.AddWithValue("@idLibro", idLibro);
+
+                    // Ejecuta la consulta de actualización
+                    comando.ExecuteNonQuery();
+                }
+            }
+            catch (SqlException sqlEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error en la consulta SQL: " + sqlEx);
+            }
+            catch (NpgsqlException npsqlEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error relaccionado con la base de datos" + npsqlEx);
+                conexion = null;
+            }
+            catch (FormatException formatEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error al convertir un valor a un tipo de dato específico " + formatEx);
+                conexion = null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error: " + ex);
+            }
+            finally
+            {
+                // Cierra la conexión si es necesario
+                if (conexion.State == ConnectionState.Open)
+                {
+                    conexion.Close();
                 }
             }
 
-
-            // Ponemos el nuevo autor en el objeto libroModificar
-            libroModificar.Isbn = nuevoIsbn;
-
-            // Consulta de actualización para modificar el autor en la base de datos
-            string consultaActualizacion = "UPDATE gbp_alm_cat_libros SET isbn = @nuevoIsbn WHERE id_libros = @idLibro";
-
-            using (NpgsqlCommand comando = new NpgsqlCommand(consultaActualizacion, conexion))
-            {
-                comando.Parameters.AddWithValue("@nuevoIsbn", nuevoIsbn);
-                comando.Parameters.AddWithValue("@idLibro", idLibro);
-
-                // Ejecuta la consulta de actualización
-                comando.ExecuteNonQuery();
-            }
-
-            // Cierra la conexión si es necesario
-            if (conexion.State == ConnectionState.Open)
-            {
-                conexion.Close();
-            }
+            
         }
 
         public void modificarEdicion(int idLibro, string nuevaEdicion, NpgsqlConnection conexion)
@@ -335,54 +486,146 @@ namespace App_Crud_Biblioteca.Servicios
             {
                 conexion.Open();
             }
-
-            // Primero, obtén los datos actuales del libro
-            LibrosDto libroModificar = new LibrosDto();
-            string consulta = "SELECT * FROM gbp_alm_cat_libros WHERE id_libros = @idLibro";
-
-            using (NpgsqlCommand comando = new NpgsqlCommand(consulta, conexion))
+            try
             {
-                //Le pasamos el parametro del idLibro para que haga
-                comando.Parameters.AddWithValue("@idLibro", idLibro);
+                // Primero, obtén los datos actuales del libro
+                LibrosDto libroModificar = new LibrosDto();
+                string consulta = "SELECT * FROM gbp_alm_cat_libros WHERE id_libros = @idLibro";
 
-                //Obtenemos los resultado de la consulta y se lo accionamos a cada propiedad.
-                using (NpgsqlDataReader reader = comando.ExecuteReader())
+                using (NpgsqlCommand comando = new NpgsqlCommand(consulta, conexion))
                 {
-                    //Verificamos si hemos encontrado el libro con ese id
-                    if (reader.HasRows)
-                    {
-                        reader.Read();
-                        //Asignamos los distintos valores a los campos de libro.
-                        libroModificar.Id_libro = idLibro;
-                        libroModificar.Titulo = reader["Titulo"].ToString();
-                        libroModificar.Autor = reader["Autor"].ToString();
-                        libroModificar.Isbn = reader["isbn"].ToString();
+                    //Le pasamos el parametro del idLibro para que haga
+                    comando.Parameters.AddWithValue("@idLibro", idLibro);
 
-                        reader.Close();
+                    //Obtenemos los resultado de la consulta y se lo accionamos a cada propiedad.
+                    using (NpgsqlDataReader reader = comando.ExecuteReader())
+                    {
+                        //Verificamos si hemos encontrado el libro con ese id
+                        if (reader.HasRows)
+                        {
+                            reader.Read();
+                            //Asignamos los distintos valores a los campos de libro.
+                            libroModificar.Id_libro = idLibro;
+                            libroModificar.Titulo = reader["Titulo"].ToString();
+                            libroModificar.Autor = reader["Autor"].ToString();
+                            libroModificar.Isbn = reader["isbn"].ToString();
+
+                            reader.Close();
+                        }
                     }
                 }
+                // Ponemos el nuevo autor en el objeto libroModificar
+                libroModificar.Autor = nuevaEdicion;
+
+                // Consulta de actualización para modificar el autor en la base de datos
+                string consultaActualizacion = "UPDATE gbp_alm_cat_libros SET edicion = @nuevaEdicion WHERE id_libros = @idLibro";
+
+                using (NpgsqlCommand comando = new NpgsqlCommand(consultaActualizacion, conexion))
+                {
+                    comando.Parameters.AddWithValue("@nuevaEdicion", nuevaEdicion);
+                    comando.Parameters.AddWithValue("@idLibro", idLibro);
+
+                    // Ejecuta la consulta de actualización
+                    comando.ExecuteNonQuery();
+                }
             }
-            // Ponemos el nuevo autor en el objeto libroModificar
-            libroModificar.Autor = nuevaEdicion;
-
-            // Consulta de actualización para modificar el autor en la base de datos
-            string consultaActualizacion = "UPDATE gbp_alm_cat_libros SET edicion = @nuevaEdicion WHERE id_libros = @idLibro";
-
-            using (NpgsqlCommand comando = new NpgsqlCommand(consultaActualizacion, conexion))
+            catch (SqlException sqlEx)
             {
-                comando.Parameters.AddWithValue("@nuevaEdicion", nuevaEdicion);
-                comando.Parameters.AddWithValue("@idLibro", idLibro);
-
-                // Ejecuta la consulta de actualización
-                comando.ExecuteNonQuery();
+                Console.WriteLine("\n\n\tSe ha producido un error en la consulta SQL: " + sqlEx);
             }
-
-            // Cierra la conexión si es necesario
-            if (conexion.State == ConnectionState.Open)
+            catch (NpgsqlException npsqlEx)
             {
-                conexion.Close();
+                Console.WriteLine("\n\n\tSe ha producido un error relaccionado con la base de datos" + npsqlEx);
+                conexion = null;
             }
+            catch (FormatException formatEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error al convertir un valor a un tipo de dato específico " + formatEx);
+                conexion = null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error: " + ex);
+            }
+            finally
+            {
+                // Cierra la conexión si es necesario
+                if (conexion.State == ConnectionState.Open)
+                {
+                    conexion.Close();
+                }
+            }
+
+            
         }
+
+        public List<long> listarTodosLosId(NpgsqlConnection conexion)
+        {
+            if (conexion.State != ConnectionState.Open)
+            {
+                conexion.Open();
+            }
+            
+            List<long> listaId = new List<long>();
+
+            try
+            {
+                //Si dejo puesto el conexion.open() me da error al ejecutar.
+                // conexion.Open();
+                string tableName = "gbp_alm_cat_libros";
+                string sqlQuery = $"SELECT id_libros FROM {tableName}";
+
+                using (NpgsqlCommand comando = new NpgsqlCommand(sqlQuery, conexion))
+                {
+                    NpgsqlDataReader resultadoConsulta = comando.ExecuteReader();
+
+                    //Pasamos el DataReader a la lista 
+
+                    while (resultadoConsulta.Read())
+                    {
+                        long idLibro = resultadoConsulta.GetInt64(0); // Suponiendo que la columna sea de tipo long en la base de datos
+                        listaId.Add(idLibro);
+                    }
+                    Console.WriteLine("[INFORMACIÓN-ConsultasPostgresqlImplementacion-seccionarTodosLibros] Cierre conexión y conjunto de datos");
+                    conexion.Close();
+                    resultadoConsulta.Close();
+                }
+            }
+            catch (SqlException sqlEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error en la consulta SQL: " + sqlEx);
+            }
+            catch (NpgsqlException npsqlEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error relaccionado con la base de datos" + npsqlEx);
+                conexion = null;
+            }
+            catch (FormatException formatEx)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error al convertir un valor a un tipo de dato específico " + formatEx);
+                conexion = null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("\n\n\tSe ha producido un error: " + ex);
+
+
+            }
+            finally
+            {
+                // Cierra la conexión si es necesario
+                if (conexion.State == ConnectionState.Open)
+                {
+                    conexion.Close();
+                }
+            }
+
+            return listaId;
+        
+    }
+
+      
+
 
         #endregion
     }
