@@ -42,15 +42,11 @@ namespace App_Crud_Biblioteca
                                 consultasPostgresInterfaz.añadirLibro(conexion);
                                 break;
 
-                            case 2:
+                            case 2://Mostrar libros.
+                                List<LibrosDto> listaDeLibros = consultasPostgresInterfaz.listarTodoLosLibros(conexion);
                                 //Cabezera
-
-                                List<LibrosDto> listaDeLibros = new List<LibrosDto>();
-                                listaDeLibros = consultasPostgresInterfaz.listarTodoLosLibros(conexion);
                                 Console.WriteLine("\n\tId    Titulo    Autor   Isbn   Edicion");
                                 consultasPostgresInterfaz.mostrarListado(listaDeLibros);
-                               
-
                                 break;
 
                             case 3://Eliminar libros

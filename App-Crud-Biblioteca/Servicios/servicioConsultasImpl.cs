@@ -19,10 +19,12 @@ namespace App_Crud_Biblioteca.Servicios
     {
         public void añadirLibro( NpgsqlConnection conexion)
         {
+            //Comprobamos si la conexion esta abierta y si no lo esta la abrimos.
             if (conexion.State != ConnectionState.Open)
             {
                 conexion.Open();
             }
+            //Preguntamos los datos del objeto libro.
             long idLibro = Util.Util.IdAleatorio();
             Console.Write("\n\n\tIntroduce el titulo del nuevo libro:");
             string tituloLibro = Console.ReadLine();
@@ -31,13 +33,12 @@ namespace App_Crud_Biblioteca.Servicios
             Console.Write("\n\n\tIntroduce el isbn del libro: ");
             string isbn=Console.ReadLine();
             int edicionLibro = Util.Util.CapturaEntero("Introduce la edicion del libro:", 1, 100);
-
+            //Creamos el objeto con los datos introducidos.
             LibrosDto nuevoLibro = new LibrosDto(idLibro, tituloLibro, autor, isbn, Convert.ToInt32(edicionLibro));
            
                 try
                 {
-
-
+                //Hacemos la query y la ejecutamos
                     string sqlQuery = "INSERT INTO gbp_alm_cat_libros (id_libros, titulo, autor, isbn, edicion) VALUES (@id, @titulo, @autor, @isbn, @edicion)";
 
                     using (NpgsqlCommand comando = new NpgsqlCommand(sqlQuery, conexion))
@@ -51,11 +52,14 @@ namespace App_Crud_Biblioteca.Servicios
                         comando.ExecuteNonQuery();
 
                     }
+                    //Cerramos conexion
                     conexion.Close();
 
+                //Mostramos los datos del nuevo libro.
                 Console.WriteLine("\n\n\tLibro insertado: Titulo:{0}  Autor:{1}  ISBN:{2}  Edicion:{3}",nuevoLibro.Titulo,nuevoLibro.Autor,nuevoLibro.Isbn,nuevoLibro.Edicion);
 
                 }
+            //Controlamos todas las excepciones posibles.
                 catch (NpgsqlException npsqlEx)
                 {
                     Console.WriteLine("\n\n\tSe ha producido un error relaccionado con la base de datos" + npsqlEx);
@@ -85,11 +89,14 @@ namespace App_Crud_Biblioteca.Servicios
         public void eliminarLibro(NpgsqlConnection conexion)
         {
 
+            //Creamos una lista donde guardaremos los id de los libros que existen.
             List<long> listaId;
+            //Guardamos en esa lista los id de los libros
             listaId = listarTodosLosId(conexion);
             string id;
             try
             {
+                //Comprobamos si la conexion esta abierta y si no lo esta la abrimos.
                 if (conexion.State != ConnectionState.Open)
                 {
                     conexion.Open();
@@ -129,6 +136,7 @@ namespace App_Crud_Biblioteca.Servicios
                     }
                 }
             }
+            //Controlamos las excepciones
             catch (SqlException sqlEx)
             {
                 Console.WriteLine("\n\n\tSe ha producido un error en la consulta SQL: " + sqlEx);
@@ -159,6 +167,7 @@ namespace App_Crud_Biblioteca.Servicios
 
         public List<LibrosDto> listarTodoLosLibros(NpgsqlConnection conexion)
         {
+            //Comprobamos si la conexion esta abierta y si no lo esta la abrimos.
             if (conexion.State != ConnectionState.Open)
             {
                 conexion.Open();
@@ -168,11 +177,11 @@ namespace App_Crud_Biblioteca.Servicios
 
             try
             {
-                //Si dejo puesto el conexion.open() me da error al ejecutar.
-                // conexion.Open();
+                //Creamos la query.
                 string tableName = "gbp_alm_cat_libros";
                 string sqlQuery = $"SELECT * FROM {tableName}";
 
+                //Ejecutamos la query y añadimos los resultados a la lista
                 using (NpgsqlCommand comando = new NpgsqlCommand(sqlQuery, conexion))
                 {
                     NpgsqlDataReader resultadoConsulta = comando.ExecuteReader();
@@ -184,6 +193,7 @@ namespace App_Crud_Biblioteca.Servicios
                     conexion.Close();
                     resultadoConsulta.Close();
                 }
+                //Controlamos las excepciones
             } catch (SqlException sqlEx)
             {
                 Console.WriteLine("\n\n\tSe ha producido un error en la consulta SQL: " + sqlEx);
@@ -247,7 +257,7 @@ namespace App_Crud_Biblioteca.Servicios
                     //Le pasamos el parametro del idLibro para que haga
                     comando.Parameters.AddWithValue("@idLibro", idLibro);
 
-                    //Obtenemos los resultado de la consulta y se lo accionamos a cada propiedad.
+                    //Obtenemos los resultado de la consulta y se lo asignamos a cada propiedad del libro.
                     using (NpgsqlDataReader reader = comando.ExecuteReader())
                     {
                         //Verificamos si hemos encontrado el libro con ese id
@@ -281,6 +291,7 @@ namespace App_Crud_Biblioteca.Servicios
 
                 }
             }
+            //Controlamos todas las excepciones
             catch (SqlException sqlEx)
             {
                 Console.WriteLine("\n\n\tSe ha producido un error en la consulta SQL: " + sqlEx);

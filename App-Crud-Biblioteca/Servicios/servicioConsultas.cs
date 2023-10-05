@@ -37,7 +37,7 @@ namespace App_Crud_Biblioteca.Servicios
         void eliminarLibro(NpgsqlConnection conexion);
         List<long> listarTodosLosId(NpgsqlConnection conexion);
 
-        void MostrarId(List<long> listaId);
+       
         #region Metodos UPDATE
 
         /// <summary>
